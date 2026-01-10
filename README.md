@@ -1,4 +1,59 @@
-# MAD-INTERNSHIP-TEAM-11
+# SkillTrack Pro — Internship & Learning Management Platform
+
+SkillTrack Pro is a production-style learning + internship tracking system with a Flutter mobile app and a Node.js/Express + PostgreSQL backend.
+
+## Repository structure
+
+- `backend/` — REST API (Express + Postgres)
+- `frontend/` — Flutter app (learner/mentor/admin roles)
+
+## Documentation
+
+- User manual: [docs/USER_MANUAL.md](docs/USER_MANUAL.md)
+- Developer guide: [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
+
+## Quickstart (local development)
+
+### 1) Backend
+
+```bash
+cd backend
+cp .env.example .env
+npm install
+npm run migrate
+npm run seed
+npm run dev
+```
+
+API runs on `http://localhost:3000` by default.
+
+Full backend docs: [backend/README.md](backend/README.md)
+
+### 2) Frontend
+
+```bash
+cd frontend
+flutter pub get
+flutter run
+```
+
+To point the app at a different backend URL:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://localhost:3000
+```
+
+Full frontend docs: [frontend/README.md](frontend/README.md)
+
+## Roles
+
+The app supports:
+
+- Learner
+- Mentor
+- Admin
+
+Authentication is token-based (JWT). RBAC and permission checks are enforced by the backend.
 
 ## Branch Management Guide
 
