@@ -1,0 +1,21 @@
+{
+  "name": "team11-excelerate-flutter-project",
+  "version": "1.0.0",
+  "description": "This guide will help you understand how to work with different branches in this repository.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Navneet1206/Team11-Excelerate-Flutter-Project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Navneet1206/Team11-Excelerate-Flutter-Project/issues"
+  },
+  "homepage": "https://github.com/Navneet1206/Team11-Excelerate-Flutter-Project#readme"
+}
