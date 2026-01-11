@@ -79,13 +79,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error,
+                  color: Theme.of(context).colorScheme.tertiary,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   count > 99 ? '99+' : '$count',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onError,
+                    color: Theme.of(context).colorScheme.onTertiary,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),

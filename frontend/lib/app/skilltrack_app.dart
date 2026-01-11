@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/token_store.dart';
+import '../ui/app_theme.dart';
 import 'auth_controller.dart';
 import 'router.dart';
 
@@ -27,10 +29,15 @@ class _SkillTrackAppState extends State<SkillTrackApp> {
 
     _tokenStore = TokenStore(const FlutterSecureStorage());
 
-    // Android emulator: use http://10.0.2.2:3000
-    // iOS simulator: use http://localhost:3000
-    // Physical device: use your machine LAN IP.
-    const baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:3000');
+    // Defaults by runtime:
+    // - Flutter Web: http://localhost:3000 (same machine)
+    // - Android emulator: http://10.0.2.2:3000 (host machine)
+    // - iOS simulator: http://localhost:3000
+    // - Physical device: use your machine LAN IP
+    final baseUrl = String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000',
+    );
 
     _api = ApiClient(
       baseUrl: baseUrl,
@@ -48,13 +55,7 @@ class _SkillTrackAppState extends State<SkillTrackApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'SkillTrack Pro',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3D5AFE)),
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-      ),
+      theme: AppTheme.light(),
       routerConfig: _router.router,
     );
   }
