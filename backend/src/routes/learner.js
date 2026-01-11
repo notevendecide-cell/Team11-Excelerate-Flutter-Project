@@ -164,6 +164,35 @@ router.get('/programs/:programId/milestones', async (req, res, next) => {
   }
 });
 
+router.get('/programs/:programId/modules/:moduleId/chapters', async (req, res, next) => {
+  try {
+    const learnerId = req.user.sub;
+    const programId = req.params.programId;
+    const moduleId = req.params.moduleId;
+
+    const access = await pool.query(
+      'SELECT 1 FROM program_learners WHERE program_id = $1 AND learner_id = $2',
+      [programId, learnerId]
+    );
+    if (access.rowCount === 0) throw new HttpError(403, 'Forbidden');
+
+    const moduleRes = await pool.query('SELECT 1 FROM milestones WHERE id = $1 AND program_id = $2', [moduleId, programId]);
+    if (moduleRes.rowCount === 0) throw new HttpError(404, 'Module not found');
+
+    const { rows } = await pool.query(
+      `SELECT id, title, sort_order, body_md
+       FROM module_chapters
+       WHERE milestone_id = $1
+       ORDER BY sort_order ASC, created_at ASC`,
+      [moduleId]
+    );
+
+    res.json({ items: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/programs/:programId/tasks', async (req, res, next) => {
   try {
     const learnerId = req.user.sub;

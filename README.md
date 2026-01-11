@@ -1,6 +1,13 @@
 # SkillTrack Pro — Internship & Learning Management Platform
 
-SkillTrack Pro is a production-style learning + internship tracking system with a Flutter mobile app and a Node.js/Express + PostgreSQL backend.
+SkillTrack Pro is a learning + internship tracking system with a Flutter mobile app and a Node.js/Express + PostgreSQL backend.
+
+Core flow:
+
+- Admin creates a Program with Modules (learning path) and module Deliverables.
+- Learners work module-by-module, submit deliverables, and track completion progress.
+- Mentors review/approve submissions.
+- After 100% completion, learners can submit a program-level review; mentors/admins can view review summaries.
 
 ## Repository structure
 
@@ -12,11 +19,6 @@ SkillTrack Pro is a production-style learning + internship tracking system with 
 - User manual: [docs/USER_MANUAL.md](docs/USER_MANUAL.md)
 - Developer guide: [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
 
-## Week 1 Submission
-
-- App proposal draft: [docs/APP_PROPOSAL.md](docs/APP_PROPOSAL.md)
-- Wireframe brief: [docs/WIREFRAME_BRIEF.md](docs/WIREFRAME_BRIEF.md)
-- Submission checklist: [docs/WEEK1_SUBMISSION_CHECKLIST.md](docs/WEEK1_SUBMISSION_CHECKLIST.md)
 
 ## Quickstart (local development)
 
