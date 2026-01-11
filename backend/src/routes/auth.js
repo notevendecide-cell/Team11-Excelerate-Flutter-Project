@@ -7,10 +7,17 @@ const { env } = require('../config/env');
 const { pool } = require('../db/pool');
 const { HttpError } = require('../utils/httpErrors');
 const { requireAuth } = require('../middleware/auth');
+const { writeAudit } = require('../utils/audit');
 
 const router = express.Router();
 
 const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+const signupSchema = z.object({
+  fullName: z.string().trim().min(2),
   email: z.string().email(),
   password: z.string().min(6),
 });
@@ -35,6 +42,53 @@ router.post('/login', async (req, res, next) => {
     );
 
     res.json({
+      token,
+      user: { id: user.id, email: user.email, role: user.role, fullName: user.full_name },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/signup', async (req, res, next) => {
+  try {
+    const body = signupSchema.parse(req.body);
+    const email = body.email.toLowerCase();
+
+    const passwordHash = await bcrypt.hash(body.password, 10);
+
+    let user;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO users(email, password_hash, role, full_name)
+         VALUES ($1, $2, 'learner', $3)
+         RETURNING id, email, role, full_name`,
+        [email, passwordHash, body.fullName]
+      );
+      user = rows[0];
+    } catch (e) {
+      // Unique violation (email already exists)
+      if (e && e.code === '23505') {
+        throw new HttpError(409, 'Email is already registered');
+      }
+      throw e;
+    }
+
+    await writeAudit({
+      actorUserId: null,
+      action: 'learner_signup',
+      entityType: 'user',
+      entityId: user.id,
+      meta: { email: user.email, role: user.role },
+    });
+
+    const token = jwt.sign(
+      { sub: user.id, role: user.role, email: user.email },
+      env.jwtSecret,
+      { expiresIn: env.jwtExpiresIn }
+    );
+
+    res.status(201).json({
       token,
       user: { id: user.id, email: user.email, role: user.role, fullName: user.full_name },
     });

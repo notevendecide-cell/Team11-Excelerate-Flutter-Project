@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/auth_controller.dart';
 import '../../services/api_client.dart';
@@ -121,8 +122,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Use the seeded users from backend (admin/mentor/learner).',
+                              'Use the seeded users from backend (admin/mentor/learner), or create a learner account.',
                               style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: _loading ? null : () => context.push('/signup'),
+                                icon: const Icon(Icons.person_add_alt_1_outlined),
+                                label: const Text('Learner Signup'),
+                              ),
                             ),
                           ],
                         ),

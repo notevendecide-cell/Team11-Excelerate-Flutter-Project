@@ -12,6 +12,12 @@ SkillTrack Pro is a production-style learning + internship tracking system with 
 - User manual: [docs/USER_MANUAL.md](docs/USER_MANUAL.md)
 - Developer guide: [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
 
+## Week 1 Submission
+
+- App proposal draft: [docs/APP_PROPOSAL.md](docs/APP_PROPOSAL.md)
+- Wireframe brief: [docs/WIREFRAME_BRIEF.md](docs/WIREFRAME_BRIEF.md)
+- Submission checklist: [docs/WEEK1_SUBMISSION_CHECKLIST.md](docs/WEEK1_SUBMISSION_CHECKLIST.md)
+
 ## Quickstart (local development)
 
 ### 1) Backend

@@ -5,6 +5,7 @@ import '../services/api_client.dart';
 import '../ui/app_popups.dart';
 import '../app/auth_controller.dart';
 import '../screens/auth/login_screen.dart';
+import '../screens/auth/signup_screen.dart';
 import '../screens/shared/notifications_screen.dart';
 import '../screens/learner/learner_dashboard_screen.dart';
 import '../screens/learner/learner_programs_screen.dart';
@@ -36,6 +37,10 @@ class AppRouter {
       GoRoute(
         path: '/login',
         builder: (context, state) => LoginScreen(auth: auth),
+      ),
+      GoRoute(
+        path: '/signup',
+        builder: (context, state) => SignupScreen(auth: auth),
       ),
       GoRoute(
         path: '/notifications',
@@ -158,9 +163,10 @@ class AppRouter {
 
       final isAuthed = auth.status == AuthStatus.authenticated;
       final goingToLogin = state.matchedLocation == '/login';
+      final goingToSignup = state.matchedLocation == '/signup';
 
       if (!isAuthed) {
-        return goingToLogin ? null : '/login';
+        return (goingToLogin || goingToSignup) ? null : '/login';
       }
 
       final role = auth.user?.role;

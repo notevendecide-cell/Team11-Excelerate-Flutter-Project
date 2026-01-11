@@ -24,7 +24,13 @@ class AuthController extends ChangeNotifier {
     status = AuthStatus.initializing;
     notifyListeners();
 
-    final token = await _tokenStore.read();
+    String? token;
+    try {
+      token = await _tokenStore.read();
+    } catch (_) {
+      // If secure storage is unavailable/misconfigured, don't crash the app.
+      token = null;
+    }
     if (token == null || token.isEmpty) {
       status = AuthStatus.unauthenticated;
       user = null;
@@ -47,6 +53,18 @@ class AuthController extends ChangeNotifier {
 
   Future<void> login({required String email, required String password}) async {
     final result = await _authService.login(email: email, password: password);
+    await _tokenStore.write(result.token);
+    user = result.user;
+    status = AuthStatus.authenticated;
+    notifyListeners();
+  }
+
+  Future<void> signupLearner({
+    required String fullName,
+    required String email,
+    required String password,
+  }) async {
+    final result = await _authService.signupLearner(fullName: fullName, email: email, password: password);
     await _tokenStore.write(result.token);
     user = result.user;
     status = AuthStatus.authenticated;
