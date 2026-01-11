@@ -239,6 +239,135 @@ router.get('/programs/:programId/progress', async (req, res, next) => {
   }
 });
 
+router.get('/programs/:programId/review', async (req, res, next) => {
+  try {
+    const learnerId = req.user.sub;
+    const programId = req.params.programId;
+
+    const access = await pool.query(
+      'SELECT 1 FROM program_learners WHERE program_id = $1 AND learner_id = $2',
+      [programId, learnerId]
+    );
+    if (access.rowCount === 0) throw new HttpError(403, 'Forbidden');
+
+    const { rows } = await pool.query(
+      `WITH stats AS (
+         SELECT
+           COUNT(*)::int AS total_tasks,
+           COUNT(*) FILTER (WHERE s.status = 'approved')::int AS approved_tasks
+         FROM tasks t
+         LEFT JOIN submissions s ON s.task_id = t.id AND s.learner_id = $2
+         WHERE t.program_id = $1
+       ),
+       review AS (
+         SELECT id, rating, feedback, created_at
+         FROM program_reviews
+         WHERE program_id = $1 AND learner_id = $2
+         LIMIT 1
+       )
+       SELECT
+         stats.total_tasks,
+         stats.approved_tasks,
+         (SELECT row_to_json(r) FROM review r) AS review
+       FROM stats`,
+      [programId, learnerId]
+    );
+
+    const row = rows[0] || { total_tasks: 0, approved_tasks: 0, review: null };
+    const totalTasks = Number(row.total_tasks || 0);
+    const approvedTasks = Number(row.approved_tasks || 0);
+    const eligible = totalTasks > 0 && approvedTasks === totalTasks;
+
+    res.json({
+      programId,
+      totalTasks,
+      approvedTasks,
+      eligible,
+      review: row.review,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const programReviewSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  feedback: z.string().max(2000).optional().default(''),
+});
+
+router.post('/programs/:programId/review', async (req, res, next) => {
+  try {
+    const learnerId = req.user.sub;
+    const programId = req.params.programId;
+    const body = programReviewSchema.parse(req.body);
+
+    const access = await pool.query(
+      'SELECT 1 FROM program_learners WHERE program_id = $1 AND learner_id = $2',
+      [programId, learnerId]
+    );
+    if (access.rowCount === 0) throw new HttpError(403, 'Forbidden');
+
+    const programRes = await pool.query('SELECT id, title, mentor_id FROM programs WHERE id = $1', [programId]);
+    const program = programRes.rows[0];
+    if (!program) throw new HttpError(404, 'Program not found');
+
+    const statsRes = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_tasks,
+         COUNT(*) FILTER (WHERE s.status = 'approved')::int AS approved_tasks
+       FROM tasks t
+       LEFT JOIN submissions s ON s.task_id = t.id AND s.learner_id = $2
+       WHERE t.program_id = $1`,
+      [programId, learnerId]
+    );
+    const stats = statsRes.rows[0] || { total_tasks: 0, approved_tasks: 0 };
+    const totalTasks = Number(stats.total_tasks || 0);
+    const approvedTasks = Number(stats.approved_tasks || 0);
+    const eligible = totalTasks > 0 && approvedTasks === totalTasks;
+    if (!eligible) throw new HttpError(409, 'Complete all program tasks before reviewing');
+
+    let inserted;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO program_reviews(program_id, learner_id, rating, feedback)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, rating, feedback, created_at`,
+        [programId, learnerId, body.rating, body.feedback]
+      );
+      inserted = rows[0];
+    } catch (e) {
+      if (e && e.code === '23505') {
+        throw new HttpError(409, 'Already reviewed');
+      }
+      throw e;
+    }
+
+    await writeAudit({
+      actorUserId: learnerId,
+      action: 'learner.submit_program_review',
+      entityType: 'program',
+      entityId: programId,
+      meta: { programId, rating: body.rating },
+    });
+
+    await pool.query(
+      `INSERT INTO notifications(user_id, type, title, body, meta)
+       VALUES (
+         $1,
+         'program_review',
+         'New program review',
+         'A learner reviewed your program.',
+         jsonb_build_object('programId', $2::text, 'learnerId', $3::text, 'rating', $4::int)
+       )`,
+      [program.mentor_id, programId, learnerId, body.rating]
+    );
+
+    res.status(201).json({ review: inserted });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/tasks/:taskId', async (req, res, next) => {
   try {
     const learnerId = req.user.sub;

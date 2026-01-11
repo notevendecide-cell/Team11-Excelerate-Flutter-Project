@@ -24,6 +24,12 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
   Map<String, dynamic>? _progress;
   List<Map<String, dynamic>> _milestones = const [];
 
+  bool _loadingReview = false;
+  bool _submittingReview = false;
+  Map<String, dynamic>? _reviewStatus;
+  int _reviewRating = 5;
+  final TextEditingController _reviewController = TextEditingController();
+
   String? _selectedMilestoneId;
 
   static const _pageSize = 20;
@@ -39,6 +45,12 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
     _load();
   }
 
+  @override
+  void dispose() {
+    _reviewController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -50,12 +62,61 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
         _milestones = ((milestones as Map<String, dynamic>)['items'] as List).cast<Map<String, dynamic>>();
       });
 
+      await _loadReviewIfEligible();
+
       await _loadTasks(reset: true);
     } on ApiException catch (e) {
       if (!mounted) return;
       await showAppErrorPopup(context, title: 'Failed to load program', message: e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadReviewIfEligible() async {
+    final completion = (_progress?['completionPercentage'] as num?)?.toInt() ?? 0;
+    if (completion < 100) {
+      if (mounted) {
+        setState(() {
+          _reviewStatus = null;
+          _loadingReview = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _loadingReview = true);
+    try {
+      final json = await widget.api.get('/learner/programs/${widget.programId}/review');
+      if (!mounted) return;
+      setState(() => _reviewStatus = json as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      await showAppErrorPopup(context, title: 'Failed to load review', message: e.message);
+    } finally {
+      if (mounted) setState(() => _loadingReview = false);
+    }
+  }
+
+  Future<void> _submitReview() async {
+    final feedback = _reviewController.text.trim();
+    setState(() => _submittingReview = true);
+    try {
+      await widget.api.post(
+        '/learner/programs/${widget.programId}/review',
+        body: {
+          'rating': _reviewRating,
+          'feedback': feedback,
+        },
+      );
+      if (!mounted) return;
+      await showAppInfoPopup(context, title: 'Thanks!', message: 'Your program review was submitted.');
+      await _loadReviewIfEligible();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      await showAppErrorPopup(context, title: 'Failed to submit review', message: e.message);
+    } finally {
+      if (mounted) setState(() => _submittingReview = false);
     }
   }
 
@@ -105,6 +166,7 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
   Widget build(BuildContext context) {
     final stats = _progress;
     final completion = stats?['completionPercentage']?.toString() ?? '0';
+    final completionInt = (stats?['completionPercentage'] as num?)?.toInt() ?? 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Program')),
@@ -197,10 +259,198 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
                         );
                       },
                     ),
+
+                  const SizedBox(height: 18),
+                  Text('Program review', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  if (completionInt < 100)
+                    Card(
+                      elevation: 0,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Complete all program tasks to leave a review. Your completion is $completion%.',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (_loadingReview)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 18),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else
+                    _ProgramReviewCard(
+                      status: _reviewStatus,
+                      rating: _reviewRating,
+                      onRatingChanged: (v) => setState(() => _reviewRating = v),
+                      controller: _reviewController,
+                      submitting: _submittingReview,
+                      onSubmit: _submitReview,
+                    ),
                 ],
               ),
             ),
     );
+  }
+}
+
+class _ProgramReviewCard extends StatelessWidget {
+  final Map<String, dynamic>? status;
+  final int rating;
+  final ValueChanged<int> onRatingChanged;
+  final TextEditingController controller;
+  final bool submitting;
+  final VoidCallback onSubmit;
+
+  const _ProgramReviewCard({
+    required this.status,
+    required this.rating,
+    required this.onRatingChanged,
+    required this.controller,
+    required this.submitting,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (status == null) {
+      return Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              const Icon(Icons.wifi_off),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Unable to load review status. Pull to refresh and try again.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final review = (status?['review'] as Map?)?.cast<String, dynamic>();
+    final eligible = status?['eligible'] == true;
+    final totalTasks = status?['totalTasks'];
+    final approvedTasks = status?['approvedTasks'];
+
+    if (review != null) {
+      final r = (review['rating'] as num?)?.toInt() ?? 0;
+      final feedback = review['feedback']?.toString() ?? '';
+      return Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your review', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Text(_stars(r), style: Theme.of(context).textTheme.titleMedium),
+              if (feedback.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(feedback, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!eligible) {
+      return Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'You can review after all tasks are approved ($approvedTasks/$totalTasks).',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Leave a review', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final v in [1, 2, 3, 4, 5])
+                  ChoiceChip(
+                    label: Text('$v'),
+                    selected: rating == v,
+                    onSelected: (_) => onRatingChanged(v),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              minLines: 3,
+              maxLines: 6,
+              maxLength: 2000,
+              decoration: const InputDecoration(
+                labelText: 'Feedback (optional)',
+                hintText: 'What went well? What could be improved?',
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: submitting ? null : onSubmit,
+                child: submitting
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Submit review'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _stars(int rating) {
+    final clamped = rating.clamp(0, 5);
+    return List.generate(5, (i) => i < clamped ? '★' : '☆').join();
   }
 }
 
