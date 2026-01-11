@@ -7,6 +7,7 @@ import '../app/auth_controller.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/signup_screen.dart';
 import '../screens/shared/notifications_screen.dart';
+import '../screens/shared/program_reviews_screen.dart';
 import '../screens/learner/learner_dashboard_screen.dart';
 import '../screens/learner/learner_programs_screen.dart';
 import '../screens/learner/learner_program_detail_screen.dart';
@@ -118,6 +119,17 @@ class AppRouter {
         builder: (context, state) => MentorProgramsScreen(api: api),
       ),
       GoRoute(
+        path: '/mentor/programs/:programId/reviews',
+        builder: (context, state) {
+          final programId = state.pathParameters['programId']!;
+          return ProgramReviewsScreen(
+            api: api,
+            title: 'Program reviews',
+            endpointPath: '/mentor/programs/$programId/reviews',
+          );
+        },
+      ),
+      GoRoute(
         path: '/mentor/programs/:programId',
         builder: (context, state) => MentorProgramOverviewScreen(
           api: api,
@@ -144,6 +156,17 @@ class AppRouter {
           api: api,
           openProgram: (id) => context.push('/admin/programs/$id'),
         ),
+      ),
+      GoRoute(
+        path: '/admin/programs/:programId/reviews',
+        builder: (context, state) {
+          final programId = state.pathParameters['programId']!;
+          return ProgramReviewsScreen(
+            api: api,
+            title: 'Program reviews',
+            endpointPath: '/admin/programs/$programId/reviews',
+          );
+        },
       ),
       GoRoute(
         path: '/admin/programs/:programId',
