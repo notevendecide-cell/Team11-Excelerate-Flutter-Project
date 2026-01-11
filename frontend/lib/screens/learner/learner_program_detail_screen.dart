@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../services/api_client.dart';
 import '../../ui/app_popups.dart';
@@ -30,14 +31,9 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
   int _reviewRating = 5;
   final TextEditingController _reviewController = TextEditingController();
 
-  String? _selectedMilestoneId;
-
   static const _pageSize = 20;
-  bool _loadingTasks = true;
-  bool _loadingMoreTasks = false;
-  bool _hasMoreTasks = true;
-  int _tasksOffset = 0;
-  final List<Map<String, dynamic>> _tasks = [];
+  final Map<String?, _ModuleTasksState> _moduleTasks = {};
+  final Map<String, _ModuleChaptersState> _moduleChapters = {};
 
   @override
   void initState() {
@@ -60,11 +56,19 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
       setState(() {
         _progress = progress as Map<String, dynamic>;
         _milestones = ((milestones as Map<String, dynamic>)['items'] as List).cast<Map<String, dynamic>>();
+
+        _moduleTasks.clear();
+        _moduleChapters.clear();
+        // Include a "General" bucket for deliverables not assigned to a module.
+        _moduleTasks[null] = _ModuleTasksState();
+        for (final m in _milestones) {
+          final id = m['id'] as String;
+          _moduleTasks[id] = _ModuleTasksState();
+          _moduleChapters[id] = _ModuleChaptersState();
+        }
       });
 
       await _loadReviewIfEligible();
-
-      await _loadTasks(reset: true);
     } on ApiException catch (e) {
       if (!mounted) return;
       await showAppErrorPopup(context, title: 'Failed to load program', message: e.message);
@@ -120,45 +124,73 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
     }
   }
 
-  Future<void> _loadTasks({required bool reset}) async {
-    if (_loadingMoreTasks) return;
-    if (!reset && !_hasMoreTasks) return;
+  Future<void> _loadModuleTasks(String? moduleId, {required bool reset}) async {
+    final state = _moduleTasks[moduleId];
+    if (state == null) return;
+    if (state.loadingMore) return;
+    if (!reset && !state.hasMore) return;
 
     setState(() {
       if (reset) {
-        _loadingTasks = true;
+        state.loading = true;
       } else {
-        _loadingMoreTasks = true;
+        state.loadingMore = true;
       }
     });
 
     try {
-      final nextOffset = reset ? 0 : _tasksOffset;
+      final nextOffset = reset ? 0 : state.offset;
       final query = <String, String>{
         'limit': '$_pageSize',
         'offset': '$nextOffset',
       };
-      if (_selectedMilestoneId != null) query['milestoneId'] = _selectedMilestoneId!;
+      if (moduleId != null) query['milestoneId'] = moduleId;
 
       final json = await widget.api.get('/learner/programs/${widget.programId}/tasks', query: query);
       final items = ((json as Map<String, dynamic>)['items'] as List).cast<Map<String, dynamic>>();
 
+      if (!mounted) return;
       setState(() {
-        if (reset) _tasks.clear();
-        _tasks.addAll(items);
-        _tasksOffset = nextOffset + items.length;
-        _hasMoreTasks = items.length == _pageSize;
+        if (reset) state.items.clear();
+        state.items.addAll(items);
+        state.offset = nextOffset + items.length;
+        state.hasMore = items.length == _pageSize;
+        state.loadedOnce = true;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      await showAppErrorPopup(context, title: 'Failed to load tasks', message: e.message);
+      await showAppErrorPopup(context, title: 'Failed to load deliverables', message: e.message);
     } finally {
       if (mounted) {
         setState(() {
-          _loadingTasks = false;
-          _loadingMoreTasks = false;
+          state.loading = false;
+          state.loadingMore = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadModuleChapters(String moduleId) async {
+    final state = _moduleChapters[moduleId];
+    if (state == null) return;
+    if (state.loading || state.loadedOnce) return;
+
+    setState(() => state.loading = true);
+    try {
+      final json = await widget.api.get('/learner/programs/${widget.programId}/modules/$moduleId/chapters');
+      final items = ((json as Map<String, dynamic>)['items'] as List).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() {
+        state.items
+          ..clear()
+          ..addAll(items);
+        state.loadedOnce = true;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      await showAppErrorPopup(context, title: 'Failed to load chapters', message: e.message);
+    } finally {
+      if (mounted) setState(() => state.loading = false);
     }
   }
 
@@ -188,74 +220,168 @@ class _LearnerProgramDetailScreenState extends State<LearnerProgramDetailScreen>
                     ],
                   ),
                   const SizedBox(height: 18),
-                  Text('Milestones', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Modules', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    height: 44,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemBuilder: (ctx, i) {
-                        if (i == 0) {
-                          final selected = _selectedMilestoneId == null;
-                          return ChoiceChip(
-                            label: const Text('All'),
-                            selected: selected,
-                            onSelected: (_) {
-                              setState(() => _selectedMilestoneId = null);
-                              _loadTasks(reset: true);
-                            },
-                          );
-                        }
-                        final m = _milestones[i - 1];
-                        final id = m['id'] as String;
-                        final selected = _selectedMilestoneId == id;
-                        return ChoiceChip(
-                          label: Text(m['title']?.toString() ?? ''),
-                          selected: selected,
-                          onSelected: (_) {
-                            setState(() => _selectedMilestoneId = id);
-                            _loadTasks(reset: true);
-                          },
-                        );
-                      },
-                      separatorBuilder: (context, index) => const SizedBox(width: 10),
-                      itemCount: _milestones.length + 1,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text('Tasks', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 10),
-                  if (_loadingTasks)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 22),
-                      child: Center(child: CircularProgressIndicator()),
+                  if (_milestones.isEmpty)
+                    Card(
+                      elevation: 0,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: Text('No modules available yet.'),
+                      ),
                     )
                   else
                     ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _tasks.length + (_hasMoreTasks ? 1 : 0),
                       separatorBuilder: (context, index) => const SizedBox(height: 10),
+                      itemCount: _milestones.length,
                       itemBuilder: (ctx, i) {
-                        if (i == _tasks.length) {
-                          if (!_loadingMoreTasks) {
-                            _loadTasks(reset: false);
-                          }
-                          return const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        final t = _tasks[i];
-                        final status = t['submission_status']?.toString() ?? 'not_submitted';
-                        final deadline = t['deadline_at']?.toString();
-                        return ListTile(
-                          tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          title: Text(t['title']?.toString() ?? ''),
-                          subtitle: Text('Status: $status${deadline == null ? '' : '\nDeadline: $deadline'}'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => widget.openTask(t['id'] as String),
+                        final m = _milestones[i];
+                        final moduleId = m['id'] as String;
+                        final moduleTitle = m['title']?.toString() ?? 'Module ${i + 1}';
+
+                        final tasksState = _moduleTasks[moduleId];
+                        final chaptersState = _moduleChapters[moduleId];
+
+                        final taskItems = tasksState?.items ?? const <Map<String, dynamic>>[];
+                        final approvedCount = taskItems
+                            .where((t) => (t['submission_status']?.toString() ?? '') == 'approved')
+                            .length;
+                        final totalCount = taskItems.length;
+
+                        return Card(
+                          elevation: 0,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          child: ExpansionTile(
+                            title: Text(moduleTitle),
+                            subtitle: (tasksState?.loadedOnce ?? false)
+                                ? Text('Deliverables: $approvedCount/$totalCount approved')
+                                : const Text('Tap to view chapters & deliverables'),
+                            onExpansionChanged: (expanded) {
+                              if (!expanded) return;
+                              if (chaptersState != null && !chaptersState.loadedOnce && !chaptersState.loading) {
+                                _loadModuleChapters(moduleId);
+                              }
+                              if (tasksState != null && !tasksState.loadedOnce && !tasksState.loading) {
+                                _loadModuleTasks(moduleId, reset: true);
+                              }
+                            },
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text('Chapters', style: Theme.of(context).textTheme.titleSmall),
+                                    const SizedBox(height: 8),
+                                    if (chaptersState == null)
+                                      const SizedBox.shrink()
+                                    else if (chaptersState.loading && chaptersState.items.isEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 10),
+                                        child: Center(child: CircularProgressIndicator()),
+                                      )
+                                    else if (chaptersState.loadedOnce && chaptersState.items.isEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 10),
+                                        child: Text('No chapters in this module.'),
+                                      )
+                                    else
+                                      ListView.separated(
+                                        shrinkWrap: true,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        itemCount: chaptersState.items.length,
+                                        separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                        itemBuilder: (context, index) {
+                                          final ch = chaptersState.items[index];
+                                          final title = ch['title']?.toString() ?? 'Chapter ${index + 1}';
+                                          final bodyMd = ch['body_md']?.toString() ?? '';
+                                          return Card(
+                                            elevation: 0,
+                                            color: Theme.of(context).colorScheme.surface,
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                                children: [
+                                                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                                                  const SizedBox(height: 8),
+                                                  MarkdownBody(
+                                                    data: bodyMd,
+                                                    selectable: true,
+                                                    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                                                      p: Theme.of(context).textTheme.bodyMedium,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    const SizedBox(height: 14),
+                                    Text('Deliverables', style: Theme.of(context).textTheme.titleSmall),
+                                    const SizedBox(height: 8),
+                                    if (tasksState == null)
+                                      const SizedBox.shrink()
+                                    else if (tasksState.loading && tasksState.items.isEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 10),
+                                        child: Center(child: CircularProgressIndicator()),
+                                      )
+                                    else if (tasksState.loadedOnce && tasksState.items.isEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 10),
+                                        child: Text('No deliverables (no submission required).'),
+                                      )
+                                    else
+                                      Column(
+                                        children: [
+                                          ListView.separated(
+                                            shrinkWrap: true,
+                                            physics: const NeverScrollableScrollPhysics(),
+                                            itemCount: tasksState.items.length,
+                                            separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                            itemBuilder: (context, index) {
+                                              final t = tasksState.items[index];
+                                              final status = t['submission_status']?.toString() ?? 'not_submitted';
+                                              final deadline = t['deadline_at']?.toString();
+                                              return ListTile(
+                                                tileColor: Theme.of(context).colorScheme.surface,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                                title: Text(t['title']?.toString() ?? ''),
+                                                subtitle: Text('Status: $status${deadline == null ? '' : '\nDeadline: $deadline'}'),
+                                                trailing: const Icon(Icons.chevron_right),
+                                                onTap: () => widget.openTask(t['id'] as String),
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(height: 10),
+                                          if (tasksState.hasMore)
+                                            SizedBox(
+                                              width: double.infinity,
+                                              child: OutlinedButton(
+                                                onPressed: tasksState.loadingMore
+                                                    ? null
+                                                    : () => _loadModuleTasks(moduleId, reset: false),
+                                                child: tasksState.loadingMore
+                                                    ? const SizedBox(
+                                                        height: 18,
+                                                        width: 18,
+                                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                                      )
+                                                    : const Text('Load more'),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -481,4 +607,19 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ModuleTasksState {
+  final List<Map<String, dynamic>> items = [];
+  int offset = 0;
+  bool hasMore = true;
+  bool loading = false;
+  bool loadingMore = false;
+  bool loadedOnce = false;
+}
+
+class _ModuleChaptersState {
+  final List<Map<String, dynamic>> items = [];
+  bool loading = false;
+  bool loadedOnce = false;
 }

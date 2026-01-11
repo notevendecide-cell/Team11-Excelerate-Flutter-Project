@@ -211,6 +211,42 @@ const createProgramSchema = z.object({
   mentorId: z.string().uuid(),
 });
 
+const createProgramWithStructureSchema = z.object({
+  title: z.string().min(2).max(200),
+  description: z.string().max(2000).optional().default(''),
+  mentorId: z.string().uuid(),
+  modules: z
+    .array(
+      z.object({
+        title: z.string().min(2).max(200),
+        sortOrder: z.number().int().min(0).max(10000).optional().default(0),
+        chapters: z
+          .array(
+            z.object({
+              title: z.string().min(2).max(200),
+              sortOrder: z.number().int().min(0).max(10000).optional().default(0),
+              bodyMd: z.string().max(50000).optional().default(''),
+            })
+          )
+          .optional()
+          .default([]),
+        items: z
+          .array(
+            z.object({
+              title: z.string().min(2).max(200),
+              description: z.string().max(5000).optional().default(''),
+              deadlineAt: z.coerce.date(),
+              resourceLinks: z.array(z.string().url()).optional().default([]),
+            })
+          )
+          .optional()
+          .default([]),
+      })
+    )
+    .optional()
+    .default([]),
+});
+
 router.post('/programs', async (req, res, next) => {
   try {
     const body = createProgramSchema.parse(req.body);
@@ -236,6 +272,105 @@ router.post('/programs', async (req, res, next) => {
     res.status(201).json({ program: rows[0] });
   } catch (err) {
     next(err);
+  }
+});
+
+router.post('/programs/with-structure', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const body = createProgramWithStructureSchema.parse(req.body);
+
+    const mentor = await client.query('SELECT 1 FROM users WHERE id = $1 AND role = $2', [body.mentorId, 'mentor']);
+    if (mentor.rowCount === 0) throw new HttpError(400, 'Invalid mentorId');
+
+    await client.query('BEGIN');
+
+    const programRes = await client.query(
+      `INSERT INTO programs(title, description, mentor_id)
+       VALUES ($1, $2, $3)
+       RETURNING id, title, description, mentor_id`,
+      [body.title, body.description, body.mentorId]
+    );
+    const program = programRes.rows[0];
+
+    await client.query(
+      `INSERT INTO audit_logs(actor_user_id, action, entity_type, entity_id, meta)
+       VALUES ($1, 'admin.create_program', 'program', $2, jsonb_build_object('mentorId', $3::text))`,
+      [req.user.sub, program.id, body.mentorId]
+    );
+
+    for (const mod of body.modules) {
+      // eslint-disable-next-line no-await-in-loop
+      const msRes = await client.query(
+        `INSERT INTO milestones(program_id, title, sort_order)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [program.id, mod.title, mod.sortOrder]
+      );
+      const milestoneId = msRes.rows[0].id;
+
+      // eslint-disable-next-line no-await-in-loop
+      await client.query(
+        `INSERT INTO audit_logs(actor_user_id, action, entity_type, entity_id, meta)
+         VALUES ($1, 'admin.create_module', 'milestone', $2, jsonb_build_object('programId', $3::text))`,
+        [req.user.sub, milestoneId, program.id]
+      );
+
+      for (const chapter of mod.chapters) {
+        // eslint-disable-next-line no-await-in-loop
+        const chRes = await client.query(
+          `INSERT INTO module_chapters(milestone_id, title, sort_order, body_md)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
+          [milestoneId, chapter.title, chapter.sortOrder, chapter.bodyMd]
+        );
+
+        // eslint-disable-next-line no-await-in-loop
+        await client.query(
+          `INSERT INTO audit_logs(actor_user_id, action, entity_type, entity_id, meta)
+           VALUES ($1, 'admin.create_module_chapter', 'module_chapter', $2, jsonb_build_object('programId', $3::text, 'moduleId', $4::text))`,
+          [req.user.sub, chRes.rows[0].id, program.id, milestoneId]
+        );
+      }
+
+      for (const item of mod.items) {
+        // eslint-disable-next-line no-await-in-loop
+        const taskRes = await client.query(
+          `INSERT INTO tasks(program_id, milestone_id, title, description, deadline_at, resource_links)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+           RETURNING id`,
+          [
+            program.id,
+            milestoneId,
+            item.title,
+            item.description,
+            item.deadlineAt.toISOString(),
+            JSON.stringify(item.resourceLinks),
+          ]
+        );
+
+        // eslint-disable-next-line no-await-in-loop
+        await client.query(
+          `INSERT INTO audit_logs(actor_user_id, action, entity_type, entity_id, meta)
+           VALUES ($1, 'admin.create_module_item', 'task', $2, jsonb_build_object('programId', $3::text, 'moduleId', $4::text))`,
+          [req.user.sub, taskRes.rows[0].id, program.id, milestoneId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ program });
+  } catch (err) {
+    try {
+      // Best-effort rollback if BEGIN succeeded.
+      // eslint-disable-next-line no-await-in-loop
+      await client.query('ROLLBACK');
+    } catch (_) {
+      // ignore
+    }
+    next(err);
+  } finally {
+    client.release();
   }
 });
 
