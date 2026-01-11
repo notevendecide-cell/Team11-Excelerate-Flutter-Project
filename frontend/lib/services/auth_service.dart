@@ -19,6 +19,24 @@ class AuthService {
     return (token: token, user: user);
   }
 
+  Future<({String token, AppUser user})> signupLearner({
+    required String fullName,
+    required String email,
+    required String password,
+  }) async {
+    final json = await _api.post('/auth/signup', auth: false, body: {
+      'fullName': fullName,
+      'email': email,
+      'password': password,
+    });
+
+    final token = (json as Map<String, dynamic>)['token'] as String;
+    final userJson = (json)['user'] as Map<String, dynamic>;
+    final user = AppUser.fromJson(userJson);
+
+    return (token: token, user: user);
+  }
+
   Future<AppUser> me() async {
     final json = await _api.get('/auth/me', auth: true);
     final userJson = (json as Map<String, dynamic>)['user'] as Map<String, dynamic>;

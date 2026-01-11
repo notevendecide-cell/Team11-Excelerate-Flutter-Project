@@ -74,6 +74,71 @@ router.get('/programs', async (req, res, next) => {
   }
 });
 
+router.get('/programs/available', async (req, res, next) => {
+  try {
+    const learnerId = req.user.sub;
+    const limit = Math.min(Number(req.query.limit || 20), 50);
+    const offset = Math.max(Number(req.query.offset || 0), 0);
+
+    const { rows } = await pool.query(
+      `SELECT p.id, p.title, p.description, p.mentor_id, u.full_name AS mentor_name
+       FROM programs p
+       JOIN users u ON u.id = p.mentor_id
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM program_learners pl
+         WHERE pl.program_id = p.id AND pl.learner_id = $1
+       )
+       ORDER BY p.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [learnerId, limit, offset]
+    );
+
+    res.json({ items: rows, limit, offset });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/programs/:programId/enroll', async (req, res, next) => {
+  try {
+    const learnerId = req.user.sub;
+    const programId = req.params.programId;
+
+    const programRes = await pool.query('SELECT id, title, mentor_id FROM programs WHERE id = $1', [programId]);
+    const program = programRes.rows[0];
+    if (!program) throw new HttpError(404, 'Program not found');
+
+    try {
+      await pool.query('INSERT INTO program_learners(program_id, learner_id) VALUES ($1, $2)', [programId, learnerId]);
+    } catch (e) {
+      // Unique violation (already enrolled)
+      if (e && e.code === '23505') {
+        throw new HttpError(409, 'Already enrolled');
+      }
+      throw e;
+    }
+
+    await writeAudit({
+      actorUserId: learnerId,
+      action: 'learner.enroll_program',
+      entityType: 'program',
+      entityId: programId,
+      meta: { programId },
+    });
+
+    await pool.query(
+      `INSERT INTO notifications(user_id, type, title, body, meta)
+       VALUES ($1, 'learner_enrolled', 'Learner enrolled', 'A learner enrolled in your program.', jsonb_build_object('programId', $2::text, 'learnerId', $3::text))`,
+      [program.mentor_id, programId, learnerId]
+    );
+
+    res.status(201).json({ ok: true, program: { id: program.id, title: program.title } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/programs/:programId/milestones', async (req, res, next) => {
   try {
     const learnerId = req.user.sub;
