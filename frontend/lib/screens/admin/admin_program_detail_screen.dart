@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../services/api_client.dart';
 import '../../ui/app_popups.dart';
@@ -107,6 +108,11 @@ class _AdminProgramDetailScreenState extends State<AdminProgramDetailScreen> {
       appBar: AppBar(
         title: const Text('Program detail'),
         actions: [
+          IconButton(
+            tooltip: 'Reviews',
+            onPressed: () => context.push('/admin/programs/${widget.programId}/reviews'),
+            icon: const Icon(Icons.star_outline),
+          ),
           IconButton(onPressed: _assignLearner, icon: const Icon(Icons.person_add_alt_1)),
           IconButton(onPressed: _createMilestone, icon: const Icon(Icons.flag_outlined)),
           IconButton(onPressed: _createTask, icon: const Icon(Icons.playlist_add)),

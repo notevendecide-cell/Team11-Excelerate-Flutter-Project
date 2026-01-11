@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../services/api_client.dart';
 import '../../ui/app_popups.dart';
@@ -42,7 +43,16 @@ class _MentorProgramOverviewScreenState extends State<MentorProgramOverviewScree
     final tasks = ((_data?['tasks'] ?? []) as List).cast<Map<String, dynamic>>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Program overview')),
+      appBar: AppBar(
+        title: const Text('Program overview'),
+        actions: [
+          IconButton(
+            tooltip: 'Reviews',
+            onPressed: () => context.push('/mentor/programs/${widget.programId}/reviews'),
+            icon: const Icon(Icons.star_outline),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

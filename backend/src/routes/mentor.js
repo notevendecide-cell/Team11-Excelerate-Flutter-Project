@@ -74,6 +74,48 @@ router.get('/programs/:programId/overview', async (req, res, next) => {
   }
 });
 
+router.get('/programs/:programId/reviews', async (req, res, next) => {
+  try {
+    const mentorId = req.user.sub;
+    const programId = req.params.programId;
+    const limit = Math.min(Number(req.query.limit || 20), 50);
+    const offset = Math.max(Number(req.query.offset || 0), 0);
+
+    const access = await pool.query('SELECT 1 FROM programs WHERE id = $1 AND mentor_id = $2', [programId, mentorId]);
+    if (access.rowCount === 0) throw new HttpError(404, 'Program not found');
+
+    const summaryRes = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_reviews,
+         COALESCE(AVG(rating), 0)::numeric(10,2) AS average_rating
+       FROM program_reviews
+       WHERE program_id = $1`,
+      [programId]
+    );
+    const summary = summaryRes.rows[0] || { total_reviews: 0, average_rating: '0.00' };
+
+    const { rows } = await pool.query(
+      `SELECT pr.id, pr.rating, pr.feedback, pr.created_at,
+              u.id AS learner_id, u.full_name AS learner_name, u.email AS learner_email
+       FROM program_reviews pr
+       JOIN users u ON u.id = pr.learner_id
+       WHERE pr.program_id = $1
+       ORDER BY pr.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [programId, limit, offset]
+    );
+
+    res.json({
+      summary: { totalReviews: summary.total_reviews, averageRating: summary.average_rating },
+      items: rows,
+      limit,
+      offset,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/dashboard', async (req, res, next) => {
   try {
     const mentorId = req.user.sub;
