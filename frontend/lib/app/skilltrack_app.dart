@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/token_store.dart';
 import '../ui/app_theme.dart';
+import '../config/app_config.dart';
 import 'auth_controller.dart';
 import 'router.dart';
 
@@ -29,18 +29,8 @@ class _SkillTrackAppState extends State<SkillTrackApp> {
 
     _tokenStore = TokenStore(const FlutterSecureStorage());
 
-    // Defaults by runtime:
-    // - Flutter Web: http://localhost:3000 (same machine)
-    // - Android emulator: http://10.0.2.2:3000 (host machine)
-    // - iOS simulator: http://localhost:3000
-    // - Physical device: use your machine LAN IP
-    final baseUrl = String.fromEnvironment(
-      'API_BASE_URL',
-      defaultValue: kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000',
-    );
-
     _api = ApiClient(
-      baseUrl: baseUrl,
+      baseUrl: AppConfig.apiBaseUrl,
       tokenProvider: _tokenStore.read,
     );
 
