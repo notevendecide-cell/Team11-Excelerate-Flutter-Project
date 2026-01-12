@@ -4,7 +4,14 @@ dotenv.config();
 
 function cleanEnvValue(value) {
   if (value == null) return value;
-  let v = String(value).trim();
+  let v = String(value);
+  // Strip common invisible characters that often get introduced by copy/paste.
+  v = v.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  // Remove leading/trailing whitespace first.
+  v = v.trim();
+  // Remove any remaining whitespace/newlines inside the value (common Vercel UI issue).
+  // This is especially important for URLs.
+  v = v.replace(/\s+/g, '');
   // Some hosting UIs accidentally include wrapping quotes.
   if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
     v = v.slice(1, -1).trim();
