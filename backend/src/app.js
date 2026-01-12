@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 
 const { errorHandler } = require('./middleware/errorHandler');
+const { pool } = require('./db/pool');
 const authRoutes = require('./routes/auth');
 const learnerRoutes = require('./routes/learner');
 const mentorRoutes = require('./routes/mentor');
@@ -17,6 +18,17 @@ function createApp() {
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (req, res) => res.json({ ok: true }));
+
+  // Helpful for deployments: confirms the API can reach Postgres.
+  // Does not expose error details to clients.
+  app.get('/health/db', async (req, res) => {
+    try {
+      await pool.query('SELECT 1 AS ok');
+      return res.json({ ok: true, db: true });
+    } catch (e) {
+      return res.status(503).json({ ok: false, db: false });
+    }
+  });
 
   app.use('/auth', authRoutes);
   app.use('/learner', learnerRoutes);
