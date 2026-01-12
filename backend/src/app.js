@@ -30,12 +30,36 @@ function createApp() {
         let host;
         let hostLen;
         let hostLastChar;
+        let dns;
         try {
           const { env } = require('./config/env');
           const url = new URL(env.databaseUrl);
           host = url.hostname;
           hostLen = host.length;
           hostLastChar = host.charCodeAt(host.length - 1);
+
+          // Optional: best-effort DNS insight (useful on IPv4-only runtimes)
+          // eslint-disable-next-line node/no-unsupported-features/node-builtins
+          const dnsPromises = require('node:dns').promises;
+          const withTimeout = async (promise, ms) =>
+            Promise.race([
+              promise,
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('dns_timeout')), ms)
+              ),
+            ]);
+
+          const [a, aaaa] = await Promise.all([
+            withTimeout(dnsPromises.resolve4(host), 750).catch((err) => ({ error: err?.code || err?.message })),
+            withTimeout(dnsPromises.resolve6(host), 750).catch((err) => ({ error: err?.code || err?.message })),
+          ]);
+
+          dns = {
+            hasA: Array.isArray(a) && a.length > 0,
+            hasAAAA: Array.isArray(aaaa) && aaaa.length > 0,
+            aError: !Array.isArray(a) ? a?.error : undefined,
+            aaaaError: !Array.isArray(aaaa) ? aaaa?.error : undefined,
+          };
         } catch (_) {
           // ignore
         }
@@ -47,6 +71,7 @@ function createApp() {
           host,
           hostLen,
           hostLastChar,
+          dns,
         });
       } catch (_) {
         // ignore

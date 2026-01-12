@@ -101,6 +101,7 @@ Base URL: `http://localhost:3000`
 
 - **Port already in use (`EADDRINUSE :3000`)**: stop the existing process or change `PORT`.
 - **Database connection failures**: confirm Postgres is running and `DATABASE_URL` is correct.
+- **Vercel + Supabase (`getaddrinfo ENOTFOUND`)**: use Supabase "Connection pooling" URL (pooler host + port `6543`). Some `db.<ref>.supabase.co` hosts are IPv6-only and can fail on IPv4-only serverless runtimes.
 
 ## Notes
 
