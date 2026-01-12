@@ -134,8 +134,26 @@ router.post('/request-password-reset', async (req, res, next) => {
     );
 
     // Production: send by email. Dev: log it.
-    // eslint-disable-next-line no-console
-    console.log('Password reset link:', `${env.frontendResetUrl}${token}`);
+    if (env.frontendResetUrl) {
+      // eslint-disable-next-line no-console
+      console.log('Password reset link:', `${env.frontendResetUrl}${token}`);
+    } else {
+      // eslint-disable-next-line no-console
+      console.log('Password reset token (dev):', token);
+      // eslint-disable-next-line no-console
+      console.log('To reset via API: POST /auth/reset-password { token, newPassword }');
+    }
+
+    // For testing without a frontend URL, we can return the token in dev only.
+    if (env.nodeEnv !== 'production') {
+      return res.json({
+        ok: true,
+        dev: {
+          resetToken: token,
+          resetEndpoint: '/auth/reset-password',
+        },
+      });
+    }
 
     return res.json({ ok: true });
   } catch (err) {
