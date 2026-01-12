@@ -2,8 +2,18 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+function cleanEnvValue(value) {
+  if (value == null) return value;
+  let v = String(value).trim();
+  // Some hosting UIs accidentally include wrapping quotes.
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
 function requireEnv(name) {
-  const value = process.env[name];
+  const value = cleanEnvValue(process.env[name]);
   if (!value) {
     throw new Error(`Missing required env var: ${name}`);
   }
@@ -11,13 +21,13 @@ function requireEnv(name) {
 }
 
 const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: cleanEnvValue(process.env.NODE_ENV) || 'development',
   port: Number(process.env.PORT || 3000),
   databaseUrl: requireEnv('DATABASE_URL'),
   jwtSecret: requireEnv('JWT_SECRET'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  jwtExpiresIn: cleanEnvValue(process.env.JWT_EXPIRES_IN) || '7d',
   resetTokenExpiresMinutes: Number(process.env.RESET_TOKEN_EXPIRES_MINUTES || 30),
-  frontendResetUrl: process.env.FRONTEND_RESET_URL || '',
+  frontendResetUrl: cleanEnvValue(process.env.FRONTEND_RESET_URL) || '',
   deadlineAlertsEnabled: (process.env.DEADLINE_ALERTS_ENABLED || 'true').toLowerCase() === 'true',
   deadlineAlertHours: Number(process.env.DEADLINE_ALERT_HOURS || 24),
   deadlineAlertIntervalMinutes: Number(process.env.DEADLINE_ALERT_INTERVAL_MINUTES || 10),
