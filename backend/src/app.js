@@ -27,11 +27,26 @@ function createApp() {
       return res.json({ ok: true, db: true });
     } catch (e) {
       try {
+        let host;
+        let hostLen;
+        let hostLastChar;
+        try {
+          const { env } = require('./config/env');
+          const url = new URL(env.databaseUrl);
+          host = url.hostname;
+          hostLen = host.length;
+          hostLastChar = host.charCodeAt(host.length - 1);
+        } catch (_) {
+          // ignore
+        }
         // eslint-disable-next-line no-console
         console.error('DB health check failed', {
           requestId: req.headers['x-vercel-id'] || req.headers['x-request-id'] || undefined,
           message: e?.message,
           code: e?.code,
+          host,
+          hostLen,
+          hostLastChar,
         });
       } catch (_) {
         // ignore
