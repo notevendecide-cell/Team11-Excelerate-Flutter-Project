@@ -26,6 +26,16 @@ function createApp() {
       await pool.query('SELECT 1 AS ok');
       return res.json({ ok: true, db: true });
     } catch (e) {
+      try {
+        // eslint-disable-next-line no-console
+        console.error('DB health check failed', {
+          requestId: req.headers['x-vercel-id'] || req.headers['x-request-id'] || undefined,
+          message: e?.message,
+          code: e?.code,
+        });
+      } catch (_) {
+        // ignore
+      }
       return res.status(503).json({ ok: false, db: false });
     }
   });
